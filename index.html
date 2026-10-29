@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Panel de Clientes - Sistema de Vibraciones</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -19,11 +19,11 @@
             <form id="login-form">
                 <div class="form-group">
                     <label for="username">Usuario</label>
-                    <input type="text" id="username" required placeholder="Ingresa tu usuario">
+                    <input type="text" id="username" required placeholder="Ingresa tu usuario" autocomplete="username">
                 </div>
                 <div class="form-group">
                     <label for="password">Contraseña</label>
-                    <input type="password" id="password" required placeholder="••••••••">
+                    <input type="password" id="password" required placeholder="••••••••" autocomplete="current-password">
                 </div>
                 <div id="login-message" class="message"></div>
                 <button type="submit" class="btn btn-primary">Iniciar Sesión</button>
@@ -48,12 +48,24 @@
         </header>
 
         <main class="main-content">
+            <!-- Botón Bloqueo Estilo Netflix (Destacado) -->
+            <div class="lock-banner-card">
+                <div class="lock-banner-info">
+                    <h3>🔒 Bloqueo Antitoques (Estilo Netflix)</h3>
+                    <p>Bloquea la pantalla para que nada se mueva ni se cierre en el bolsillo. Sigue vibrando fuerte.</p>
+                </div>
+                <button id="btn-lock-screen" class="btn-lock-netflix">
+                    <span class="lock-icon">🔒</span>
+                    <span>Bloquear Pantalla</span>
+                </button>
+            </div>
+
             <!-- Estado de Conexión -->
             <div class="connection-card">
                 <div class="connection-status">
                     <div id="status-icon" class="status-icon connecting"></div>
                     <div class="status-text">
-                        <h3 id="status-text">Conectando...</h3>
+                        <h3 id="status-title">Conectando...</h3>
                         <p id="status-detail">Estableciendo conexión con el servidor</p>
                     </div>
                 </div>
@@ -64,6 +76,30 @@
                 <h2>Última Vibración</h2>
                 <div id="vibration-letter" class="vibration-letter">—</div>
                 <p id="vibration-time" class="vibration-time">Esperando vibración...</p>
+            </div>
+
+            <!-- Botones de Prueba Rápida de Vibración (0.8s) -->
+            <div class="test-card">
+                <h3>⚡ Probar Vibración Fuerte (0.8s)</h3>
+                <p class="test-subtitle">Prueba los pulsos de 0.8s a máxima fuerza en tu celular</p>
+                <div class="test-buttons-grid">
+                    <button class="test-btn" onclick="probarVibracion('A')">
+                        <strong>A</strong>
+                        <small>1 pulso</small>
+                    </button>
+                    <button class="test-btn" onclick="probarVibracion('B')">
+                        <strong>B</strong>
+                        <small>2 pulsos</small>
+                    </button>
+                    <button class="test-btn" onclick="probarVibracion('C')">
+                        <strong>C</strong>
+                        <small>3 pulsos</small>
+                    </button>
+                    <button class="test-btn" onclick="probarVibracion('D')">
+                        <strong>D</strong>
+                        <small>4 pulsos</small>
+                    </button>
+                </div>
             </div>
 
             <!-- Información del Usuario -->
@@ -91,19 +127,15 @@
             <div class="instructions-card">
                 <h3>¿Cómo funciona?</h3>
                 <ol>
-                    <li>Asegúrate de tener esta página abierta en tu navegador</li>
-                    <li>El servidor de escritorio enviará vibraciones automáticamente</li>
-                    <li>Cada vibración corresponde a una letra de respuesta (A, B, C, D)</li>
-                    <li>1 vibración = A, 2 vibraciones = B, 3 vibraciones = C, 4 vibraciones = D</li>
+                    <li>Pulsa <strong>Bloquear Pantalla</strong> para meter el celular al bolsillo sin riesgo de toques accidentales.</li>
+                    <li>Cada vibración dura <strong>0.8 segundos</strong> continuos con pausa de 0.8s para contarlas fácilmente.</li>
+                    <li>1 vibración = A, 2 vibraciones = B, 3 vibraciones = C, 4 vibraciones = D.</li>
                 </ol>
-                <div class="warning">
-                    ⚠️ Mantén esta página abierta para recibir vibraciones en tiempo real
-                </div>
             </div>
         </main>
     </div>
 
-    <!-- Modal de Vibración -->
+    <!-- Modal de Vibración Flotante -->
     <div id="vibration-modal" class="modal hidden">
         <div class="vibration-modal-content">
             <div id="vibration-animation" class="vibration-animation">
@@ -111,6 +143,29 @@
             </div>
             <h2 id="vibration-modal-letter">A</h2>
             <p id="vibration-modal-count">1 vibración</p>
+        </div>
+    </div>
+
+    <!-- PANTALLA BLOQUEADA ESTILO NETFLIX (Overlay Completo) -->
+    <div id="netflix-lock-overlay" class="netflix-lock-overlay hidden">
+        <!-- Letra tenue de última opción recibida (modo sigilo) -->
+        <div id="lock-stealth-letter" class="lock-stealth-letter">—</div>
+
+        <div class="lock-center-container">
+            <!-- Candado interactivo -->
+            <div id="lock-bubble" class="lock-bubble">
+                <span id="lock-icon" class="lock-icon-svg">🔒</span>
+            </div>
+            <p id="lock-status-text" class="lock-status-text">Pantalla bloqueada</p>
+            
+            <!-- Botón de Confirmación para Desbloquear -->
+            <button id="lock-confirm-btn" class="lock-confirm-btn hidden">
+                🔓 Confirmar Desbloqueo
+            </button>
+        </div>
+
+        <div class="lock-footer-hint" id="lock-footer-hint">
+            Toca la pantalla para activar el candado
         </div>
     </div>
 
