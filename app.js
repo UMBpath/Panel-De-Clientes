@@ -294,7 +294,7 @@ function updateUserInfo() {
 }
 
 // ============================================================
-// TEMPORIZADOR REGRESIVO DE LICENCIA EN TIEMPO REAL
+// TEMPORIZADOR REGRESIVO DE LICENCIA EN TIEMPO REAL (TEXTO NATURAL, SIN COLORES)
 // ============================================================
 let licenseTimerInterval = null;
 
@@ -309,16 +309,11 @@ function iniciarTemporizadorLicencia() {
 
 function actualizarTemporizador() {
     const countdownEl = document.getElementById('license-countdown');
-    const countdownSub = document.getElementById('license-countdown-sub');
     const infoTimeLeft = document.getElementById('info-time-left');
 
     if (!userData || !userData.fecha_expiracion) {
-        if (countdownEl) {
-            countdownEl.textContent = "Sin límite";
-            countdownEl.className = "license-countdown";
-        }
-        if (countdownSub) countdownSub.textContent = "Licencia permanente o sin fecha definida";
-        if (infoTimeLeft) infoTimeLeft.textContent = "Permanente";
+        if (countdownEl) countdownEl.textContent = "Sin límite";
+        if (infoTimeLeft) infoTimeLeft.textContent = "Sin límite";
         return;
     }
 
@@ -327,15 +322,8 @@ function actualizarTemporizador() {
     const diff = expiracion - ahora;
 
     if (diff <= 0) {
-        if (countdownEl) {
-            countdownEl.textContent = "LICENCIA EXPIRADA";
-            countdownEl.className = "license-countdown expired";
-        }
-        if (countdownSub) countdownSub.textContent = "Tu tiempo de licencia ha finalizado";
-        if (infoTimeLeft) {
-            infoTimeLeft.textContent = "00:00:00 (Expirada)";
-            infoTimeLeft.style.color = "#ef4444";
-        }
+        if (countdownEl) countdownEl.textContent = "0 segundos (Licencia expirada)";
+        if (infoTimeLeft) infoTimeLeft.textContent = "0 segundos (Expirada)";
         return;
     }
 
@@ -344,36 +332,25 @@ function actualizarTemporizador() {
     const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const segundos = Math.floor((diff % (1000 * 60)) / 1000);
 
-    const pad = (n) => String(n).padStart(2, '0');
-
-    let textoCorto = "";
-    let textoCompleto = "";
-
+    const partes = [];
     if (dias > 0) {
-        textoCorto = `${dias}d ${pad(horas)}h ${pad(minutos)}m ${pad(segundos)}s`;
-        textoCompleto = `${dias} día${dias > 1 ? 's' : ''}, ${pad(horas)}h ${pad(minutos)}m ${pad(segundos)}s restantes`;
-    } else {
-        textoCorto = `${pad(horas)}:${pad(minutos)}:${pad(segundos)}`;
-        textoCompleto = `${pad(horas)} horas, ${pad(minutos)} minutos y ${pad(segundos)} segundos restantes`;
+        partes.push(`${dias} ${dias === 1 ? 'día' : 'días'}`);
     }
+    if (horas > 0 || dias > 0) {
+        partes.push(`${horas} ${horas === 1 ? 'hora' : 'horas'}`);
+    }
+    if (minutos > 0 || horas > 0 || dias > 0) {
+        partes.push(`${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}`);
+    }
+    partes.push(`${segundos} ${segundos === 1 ? 'segundo' : 'segundos'}`);
+
+    const texto = partes.join(', ');
 
     if (countdownEl) {
-        countdownEl.textContent = textoCorto;
-        if (diff < 15 * 60 * 1000) {
-            // Alerta: menos de 15 minutos restantes
-            countdownEl.className = "license-countdown warning";
-        } else {
-            countdownEl.className = "license-countdown";
-        }
+        countdownEl.textContent = texto;
     }
-
-    if (countdownSub) {
-        countdownSub.textContent = textoCompleto;
-    }
-
     if (infoTimeLeft) {
-        infoTimeLeft.textContent = textoCorto;
-        infoTimeLeft.style.color = diff < 15 * 60 * 1000 ? "#f59e0b" : "#38bdf8";
+        infoTimeLeft.textContent = texto;
     }
 }
 

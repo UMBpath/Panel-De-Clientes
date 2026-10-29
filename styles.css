@@ -427,17 +427,16 @@ body {
 }
 
 /* ============================================================ */
-/* TARJETA DE TEMPORIZADOR DE LICENCIA                         */
+/* TARJETA DE TEMPORIZADOR DE LICENCIA (SIN COLORINES, LIMPIO)  */
 /* ============================================================ */
 
 .license-timer-card {
-    background: linear-gradient(135deg, #0f172a, #1e1b4b);
-    border: 1px solid #4338ca;
-    border-radius: 14px;
-    padding: 22px 20px;
+    background: white;
+    border-radius: 12px;
+    padding: 18px 20px;
     margin-bottom: 20px;
     text-align: center;
-    box-shadow: 0 4px 20px rgba(67, 56, 202, 0.25);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -448,44 +447,22 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #a5b4fc;
+    color: #64748b;
     font-size: 13px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
 }
 
 .license-countdown {
-    font-size: 36px;
-    font-weight: 900;
-    color: #38bdf8;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 1.5px;
-    text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    font-size: 19px;
+    font-weight: 700;
+    color: #1e293b;
     margin: 4px 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.license-countdown.warning {
-    color: #f59e0b;
-    text-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
-}
-
-.license-countdown.expired {
-    color: #ef4444;
-    text-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
-    font-size: 26px;
-}
-
-.license-countdown-sub {
-    font-size: 12px;
-    color: #94a3b8;
+    line-height: 1.4;
 }
 
 .timer-highlight {
-    color: #38bdf8 !important;
-    font-weight: 700 !important;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #1e293b !important;
+    font-weight: 600 !important;
 }
 
 /* ============================================================ */
