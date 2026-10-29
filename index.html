@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Clientes - Sistema de Vibraciones</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <!-- Pantalla de Login -->
+    <div id="login-screen" class="screen">
+        <div class="login-container">
+            <div class="logo">
+                <div class="vibration-icon">📳</div>
+                <h1>Salva</h1>
+                <p>Sistema de Vibraciones</p>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="username">Usuario</label>
+                    <input type="text" id="username" required placeholder="Ingresa tu usuario">
+                </div>
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" required placeholder="••••••••">
+                </div>
+                <div id="login-message" class="message"></div>
+                <button type="submit" class="btn btn-primary">Iniciar Sesión</button>
+            </form>
+            <p class="info-text">
+                Ingresa las credenciales proporcionadas por el administrador.
+            </p>
+        </div>
+    </div>
+
+    <!-- Panel Principal -->
+    <div id="main-screen" class="screen hidden">
+        <header class="main-header">
+            <div class="header-left">
+                <div class="vibration-icon-small">📳</div>
+                <h1>Salva</h1>
+            </div>
+            <div class="header-right">
+                <span id="user-display" class="user-display"></span>
+                <button id="logout-btn" class="btn btn-secondary btn-small">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Estado de Conexión -->
+            <div class="connection-card">
+                <div class="connection-status">
+                    <div id="status-icon" class="status-icon connecting"></div>
+                    <div class="status-text">
+                        <h3 id="status-text">Conectando...</h3>
+                        <p id="status-detail">Estableciendo conexión con el servidor</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vibración Recibida -->
+            <div class="vibration-display">
+                <h2>Última Vibración</h2>
+                <div id="vibration-letter" class="vibration-letter">—</div>
+                <p id="vibration-time" class="vibration-time">Esperando vibración...</p>
+            </div>
+
+            <!-- Información del Usuario -->
+            <div class="user-info-card">
+                <h3>Información de tu Cuenta</h3>
+                <div class="info-row">
+                    <span class="info-label">Usuario:</span>
+                    <span id="info-username" class="info-value">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Plan:</span>
+                    <span id="info-plan" class="info-value">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Expira:</span>
+                    <span id="info-expiration" class="info-value">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Estado:</span>
+                    <span id="info-status" class="info-value">—</span>
+                </div>
+            </div>
+
+            <!-- Instrucciones -->
+            <div class="instructions-card">
+                <h3>¿Cómo funciona?</h3>
+                <ol>
+                    <li>Asegúrate de tener esta página abierta en tu navegador</li>
+                    <li>El servidor de escritorio enviará vibraciones automáticamente</li>
+                    <li>Cada vibración corresponde a una letra de respuesta (A, B, C, D)</li>
+                    <li>1 vibración = A, 2 vibraciones = B, 3 vibraciones = C, 4 vibraciones = D</li>
+                </ol>
+                <div class="warning">
+                    ⚠️ Mantén esta página abierta para recibir vibraciones en tiempo real
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal de Vibración -->
+    <div id="vibration-modal" class="modal hidden">
+        <div class="vibration-modal-content">
+            <div id="vibration-animation" class="vibration-animation">
+                <div class="vibration-circle"></div>
+            </div>
+            <h2 id="vibration-modal-letter">A</h2>
+            <p id="vibration-modal-count">1 vibración</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
