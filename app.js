@@ -2,6 +2,9 @@
 const SUPABASE_URL = "https://lcrctcaogoyimtjmdqzu.supabase.co";
 const SUPABASE_KEY = "sb_publishable_gQeoJvYho2FGdOX-JqXJlQ_6qJDzxV-";
 
+// Tiempo máximo de inactividad sin recibir vibraciones: 2 horas (en milisegundos)
+const TIEMPO_MAX_INACTIVIDAD_MS = 2 * 60 * 60 * 1000; // 2 horas (7,200,000 ms)
+
 // Inicializar Supabase
 let supabaseClient;
 
@@ -41,6 +44,60 @@ const lockFooterHint = document.getElementById('lock-footer-hint');
 let currentUser = null;
 let userData = null;
 let realtimeChannel = null;
+
+// ============================================================
+// CONTROL DE INACTIVIDAD (2 HORAS SIN VIBRACIÓN: ABIERTA O CERRADA)
+// ============================================================
+
+function registrarActividadVibracion() {
+    localStorage.setItem('ultima_vibracion_timestamp', Date.now().toString());
+}
+
+function verificarInactividadSesion() {
+    if (!currentUser) return;
+
+    const ultimoTimestamp = parseInt(localStorage.getItem('ultima_vibracion_timestamp') || '0', 10);
+    if (ultimoTimestamp > 0 && (Date.now() - ultimoTimestamp) >= TIEMPO_MAX_INACTIVIDAD_MS) {
+        console.log("⏰ Pasaron 2 horas sin recibir vibraciones. Cerrando sesión automáticamente...");
+        cerrarSesionPorInactividad();
+    }
+}
+
+// Revisar cada 30 segundos mientras la página esté abierta
+setInterval(verificarInactividadSesion, 30000);
+
+function cerrarSesionPorInactividad() {
+    limpiarSesion();
+    mainScreen.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+    loginForm.reset();
+    showMessage(
+        "login-message",
+        "Tu sesión se cerró automáticamente por inactividad (más de 2 horas sin vibraciones). Por favor, ingresa tus credenciales de nuevo.",
+        "info"
+    );
+}
+
+function limpiarSesion() {
+    if (realtimeChannel) {
+        realtimeChannel.unsubscribe();
+        realtimeChannel = null;
+    }
+
+    localStorage.removeItem('usuario');
+    localStorage.removeItem('password');
+    localStorage.removeItem('ultima_vibracion_timestamp');
+
+    currentUser = null;
+    userData = null;
+
+    if (typeof desactivarBloqueoNetflix === 'function') {
+        desactivarBloqueoNetflix();
+    }
+    if (typeof releaseWakeLock === 'function') {
+        releaseWakeLock();
+    }
+}
 
 // ============================================================
 // MOTOR DE VIBRACIÓN FUERTE (0.8s continuo y espaciado)
@@ -99,7 +156,7 @@ function updateConnectionStatus(status, text, detail) {
     if (statusDetail) statusDetail.textContent = detail;
 }
 
-// Autenticar usuario
+// Autenticar usuario (si la licencia expiró, igual puede entrar pero en modo inactivo)
 async function authenticateUser(username, password) {
     try {
         const response = await supabaseClient.rpc('autenticar_usuario_app', {
@@ -108,6 +165,22 @@ async function authenticateUser(username, password) {
             p_device_id: getDeviceId(),
             p_origen: 'web'
         });
+
+        // Caso: la licencia expiró -> el usuario entra a su cuenta pero inactivo (no le sirve nada)
+        const msg = (response.data?.mensaje || response.error?.message || '').toLowerCase();
+        if (msg.includes('expirad')) {
+            console.warn("Licencia expirada: acceso permitido en modo inactivo");
+            return {
+                success: true,
+                message: 'Licencia expirada',
+                data: {
+                    usuario: username,
+                    plan: 'Expirado',
+                    fecha_expiracion: null,
+                    estado: 'inactivo'
+                }
+            };
+        }
 
         if (response.error) {
             console.error("Error autenticando:", response.error);
@@ -156,9 +229,10 @@ loginForm.addEventListener('submit', async (e) => {
         currentUser = username;
         userData = result.data;
 
-        // Guardar sesión
+        // Guardar sesión y fijar marca de tiempo de inicio de actividad
         localStorage.setItem('usuario', username);
         localStorage.setItem('password', password);
+        registrarActividadVibracion();
 
         // Mostrar pantalla principal
         userDisplay.textContent = username;
@@ -176,19 +250,9 @@ loginForm.addEventListener('submit', async (e) => {
     }
 });
 
-// Logout
+// Logout manual
 logoutBtn.addEventListener('click', () => {
-    if (realtimeChannel) {
-        realtimeChannel.unsubscribe();
-        realtimeChannel = null;
-    }
-
-    localStorage.removeItem('usuario');
-    localStorage.removeItem('password');
-
-    currentUser = null;
-    userData = null;
-
+    limpiarSesion();
     mainScreen.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     loginForm.reset();
@@ -215,7 +279,7 @@ function updateUserInfo() {
             elStatus.textContent = 'Activo';
             elStatus.style.color = '#27ae60';
         } else {
-            elStatus.textContent = 'Inactivo';
+            elStatus.textContent = 'Expirado / Inactivo';
             elStatus.style.color = '#c0392b';
         }
     }
@@ -243,7 +307,11 @@ function startListeningForVibrations() {
                 console.log('Status del canal:', status);
 
                 if (status === 'SUBSCRIBED') {
-                    updateConnectionStatus('connected', 'Conectado', 'Escuchando vibraciones en tiempo real');
+                    if (userData && userData.estado === 'inactivo') {
+                        updateConnectionStatus('error', 'Licencia Expirada', 'Tu cuenta está inactiva. No recibirá vibraciones.');
+                    } else {
+                        updateConnectionStatus('connected', 'Conectado', 'Escuchando vibraciones en tiempo real');
+                    }
                 } else if (error) {
                     console.error('Error en el canal:', error);
                     updateConnectionStatus('error', 'Error de conexión', error.message);
@@ -268,6 +336,15 @@ function handleVibration(data) {
         console.log('Vibración de otro usuario, ignorando');
         return;
     }
+
+    // SI LA LICENCIA EXPIRÓ: ENTRA A LA CUENTA PERO NO LE SIRVE NADA (NO VIBRA)
+    if (userData && (userData.estado === 'inactivo' || userData.estado === 'expirado')) {
+        console.warn("Licencia vencida: vibración recibida pero bloqueada (cuenta inactiva)");
+        return;
+    }
+
+    // CADA VEZ QUE RECIBE UNA VIBRACIÓN, SE REINICIA EL TEMPORIZADOR DE 2 HORAS
+    registrarActividadVibracion();
 
     // Actualizar display
     if (vibrationLetter) vibrationLetter.textContent = letra;
@@ -300,6 +377,11 @@ function showVibrationModal(letra) {
 
 // Prueba manual desde botones
 function probarVibracion(letra) {
+    if (userData && (userData.estado === 'inactivo' || userData.estado === 'expirado')) {
+        alert("Tu licencia ha expirado. No puedes recibir ni emitir vibraciones.");
+        return;
+    }
+    registrarActividadVibracion();
     const count = getVibrationCount(letra);
     if (vibrationLetter) vibrationLetter.textContent = letra;
     if (vibrationTime) vibrationTime.textContent = `Prueba manual: ${new Date().toLocaleTimeString('es-PE')}`;
@@ -471,12 +553,27 @@ if (btnLockScreen) {
     btnLockScreen.addEventListener('click', activarBloqueoNetflix);
 }
 
-// Verificar sesión existente al cargar
+// ============================================================
+// VERIFICAR SESIÓN AL CARGAR (VERIFICA SI ESTUVO CERRADA MÁS DE 2 HORAS)
+// ============================================================
 async function checkExistingSession() {
     const savedUser = localStorage.getItem('usuario');
     const savedPassword = localStorage.getItem('password');
+    const lastVib = parseInt(localStorage.getItem('ultima_vibracion_timestamp') || '0', 10);
 
     if (savedUser && savedPassword) {
+        // SI ESTUVO CERRADA Y PASARON MÁS DE 2 HORAS SIN VIBRACIÓN:
+        if (lastVib > 0 && (Date.now() - lastVib) >= TIEMPO_MAX_INACTIVIDAD_MS) {
+            console.log("⏰ Pasaron más de 2 horas sin vibración mientras la página estuvo cerrada.");
+            limpiarSesion();
+            showMessage(
+                "login-message",
+                "Tu sesión se cerró automáticamente (más de 2 horas sin vibraciones). Vuelve a iniciar sesión.",
+                "info"
+            );
+            return;
+        }
+
         const result = await authenticateUser(savedUser, savedPassword);
 
         if (result.success && result.data) {
@@ -490,8 +587,7 @@ async function checkExistingSession() {
             updateUserInfo();
             startListeningForVibrations();
         } else {
-            localStorage.removeItem('usuario');
-            localStorage.removeItem('password');
+            limpiarSesion();
         }
     }
 }
