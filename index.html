@@ -71,6 +71,20 @@
                 </div>
             </div>
 
+            <!-- Temporizador en Vivo de la Licencia -->
+            <div class="license-timer-card">
+                <div class="timer-header">
+                    <span class="timer-icon">⏳</span>
+                    <span class="timer-title">Tiempo Restante de tu Licencia</span>
+                </div>
+                <div id="license-countdown" class="license-countdown">
+                    --:--:--
+                </div>
+                <div id="license-countdown-sub" class="license-countdown-sub">
+                    Calculando tiempo...
+                </div>
+            </div>
+
             <!-- Vibración Recibida -->
             <div class="vibration-display">
                 <h2>Última Vibración</h2>
@@ -116,6 +130,10 @@
                 <div class="info-row">
                     <span class="info-label">Expira:</span>
                     <span id="info-expiration" class="info-value">—</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Tiempo Restante:</span>
+                    <span id="info-time-left" class="info-value timer-highlight">—</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Estado:</span>

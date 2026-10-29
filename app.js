@@ -79,6 +79,11 @@ function cerrarSesionPorInactividad() {
 }
 
 function limpiarSesion() {
+    if (licenseTimerInterval) {
+        clearInterval(licenseTimerInterval);
+        licenseTimerInterval = null;
+    }
+
     if (realtimeChannel) {
         realtimeChannel.unsubscribe();
         realtimeChannel = null;
@@ -282,6 +287,93 @@ function updateUserInfo() {
             elStatus.textContent = 'Expirado / Inactivo';
             elStatus.style.color = '#c0392b';
         }
+    }
+
+    // Iniciar temporizador regresivo de licencia
+    iniciarTemporizadorLicencia();
+}
+
+// ============================================================
+// TEMPORIZADOR REGRESIVO DE LICENCIA EN TIEMPO REAL
+// ============================================================
+let licenseTimerInterval = null;
+
+function iniciarTemporizadorLicencia() {
+    if (licenseTimerInterval) {
+        clearInterval(licenseTimerInterval);
+        licenseTimerInterval = null;
+    }
+    actualizarTemporizador();
+    licenseTimerInterval = setInterval(actualizarTemporizador, 1000);
+}
+
+function actualizarTemporizador() {
+    const countdownEl = document.getElementById('license-countdown');
+    const countdownSub = document.getElementById('license-countdown-sub');
+    const infoTimeLeft = document.getElementById('info-time-left');
+
+    if (!userData || !userData.fecha_expiracion) {
+        if (countdownEl) {
+            countdownEl.textContent = "Sin límite";
+            countdownEl.className = "license-countdown";
+        }
+        if (countdownSub) countdownSub.textContent = "Licencia permanente o sin fecha definida";
+        if (infoTimeLeft) infoTimeLeft.textContent = "Permanente";
+        return;
+    }
+
+    const ahora = Date.now();
+    const expiracion = new Date(userData.fecha_expiracion).getTime();
+    const diff = expiracion - ahora;
+
+    if (diff <= 0) {
+        if (countdownEl) {
+            countdownEl.textContent = "LICENCIA EXPIRADA";
+            countdownEl.className = "license-countdown expired";
+        }
+        if (countdownSub) countdownSub.textContent = "Tu tiempo de licencia ha finalizado";
+        if (infoTimeLeft) {
+            infoTimeLeft.textContent = "00:00:00 (Expirada)";
+            infoTimeLeft.style.color = "#ef4444";
+        }
+        return;
+    }
+
+    const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const horas = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const segundos = Math.floor((diff % (1000 * 60)) / 1000);
+
+    const pad = (n) => String(n).padStart(2, '0');
+
+    let textoCorto = "";
+    let textoCompleto = "";
+
+    if (dias > 0) {
+        textoCorto = `${dias}d ${pad(horas)}h ${pad(minutos)}m ${pad(segundos)}s`;
+        textoCompleto = `${dias} día${dias > 1 ? 's' : ''}, ${pad(horas)}h ${pad(minutos)}m ${pad(segundos)}s restantes`;
+    } else {
+        textoCorto = `${pad(horas)}:${pad(minutos)}:${pad(segundos)}`;
+        textoCompleto = `${pad(horas)} horas, ${pad(minutos)} minutos y ${pad(segundos)} segundos restantes`;
+    }
+
+    if (countdownEl) {
+        countdownEl.textContent = textoCorto;
+        if (diff < 15 * 60 * 1000) {
+            // Alerta: menos de 15 minutos restantes
+            countdownEl.className = "license-countdown warning";
+        } else {
+            countdownEl.className = "license-countdown";
+        }
+    }
+
+    if (countdownSub) {
+        countdownSub.textContent = textoCompleto;
+    }
+
+    if (infoTimeLeft) {
+        infoTimeLeft.textContent = textoCorto;
+        infoTimeLeft.style.color = diff < 15 * 60 * 1000 ? "#f59e0b" : "#38bdf8";
     }
 }
 
