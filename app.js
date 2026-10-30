@@ -311,7 +311,18 @@ function actualizarTemporizador() {
     const countdownEl = document.getElementById('license-countdown');
     const infoTimeLeft = document.getElementById('info-time-left');
 
-    if (!userData || !userData.fecha_expiracion) {
+    if (!userData) return;
+
+    // Verificar si es licencia infinita
+    const esInfinita = userData.plan && userData.plan.toLowerCase().includes('infinit');
+
+    if (esInfinita) {
+        if (countdownEl) countdownEl.textContent = "Sin límite";
+        if (infoTimeLeft) infoTimeLeft.textContent = "Sin límite";
+        return;
+    }
+
+    if (!userData.fecha_expiracion) {
         if (countdownEl) countdownEl.textContent = "Sin límite";
         if (infoTimeLeft) infoTimeLeft.textContent = "Sin límite";
         return;
