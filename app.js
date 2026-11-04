@@ -105,7 +105,51 @@ function limpiarSesion() {
 }
 
 // ============================================================
-// MOTOR DE VIBRACIÓN FUERTE (0.8s continuo y espaciado)
+// DETECCIÓN DE iOS (Safari no soporta navigator.vibrate)
+// ============================================================
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+// AudioContext compartido (se crea la primera vez que el usuario interactúa)
+let _audioCtx = null;
+function getAudioCtx() {
+    if (!_audioCtx) {
+        try {
+            _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.warn('AudioContext no disponible:', e);
+        }
+    }
+    return _audioCtx;
+}
+
+// Desbloquear AudioContext en el primer toque (iOS requiere esto)
+document.addEventListener('touchstart', () => { getAudioCtx(); }, { once: true });
+
+// Reproduce un pitido corto de 80 ms
+function playBeep(frequency = 880, duration = 0.08) {
+    const ctx = getAudioCtx();
+    if (!ctx) return Promise.resolve();
+    return new Promise(resolve => {
+        try {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.value = frequency;
+            gain.gain.setValueAtTime(0.9, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + duration + 0.01);
+            osc.onended = resolve;
+        } catch (e) {
+            resolve();
+        }
+    });
+}
+
+// ============================================================
+// MOTOR DE VIBRACIÓN / AUDIO (Android vibra, iPhone pita)
 // ============================================================
 let isVibrating = false;
 
@@ -116,24 +160,24 @@ async function triggerVibration(count) {
     }
     isVibrating = true;
 
-    if (navigator.vibrate) {
+    if (!isIOS && navigator.vibrate) {
+        // --- Android: vibración física ---
         for (let i = 0; i < count; i++) {
-            try {
-                // 800ms de vibración continua a máxima intensidad
-                navigator.vibrate(800);
-            } catch (e) {
-                console.error("Error al llamar a navigator.vibrate:", e);
-            }
-
+            try { navigator.vibrate(800); } catch (e) {}
             if (i < count - 1) {
-                // 800ms vibrando + 800ms de pausa entre cada pulso
                 await new Promise(r => setTimeout(r, 1600));
             } else {
                 await new Promise(r => setTimeout(r, 800));
             }
         }
     } else {
-        console.warn("Este dispositivo o navegador no soporta navigator.vibrate");
+        // --- iOS / sin vibración: pitidos de audio ---
+        for (let i = 0; i < count; i++) {
+            await playBeep(880, 0.12);
+            if (i < count - 1) {
+                await new Promise(r => setTimeout(r, 350));
+            }
+        }
     }
 
     isVibrating = false;
@@ -553,7 +597,9 @@ async function activarBloqueoNetflix() {
     if (lockOverlay) lockOverlay.classList.remove('hidden');
 
     // Desbloquear permisos de audio y vibración con este clic
-    if (navigator.vibrate) {
+    if (isIOS) {
+        getAudioCtx(); // desbloquear AudioContext en iOS
+    } else if (navigator.vibrate) {
         try { navigator.vibrate(80); } catch(e){}
     }
 
