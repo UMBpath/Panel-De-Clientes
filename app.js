@@ -58,12 +58,12 @@ function verificarInactividadSesion() {
 
     const ultimoTimestamp = parseInt(localStorage.getItem('ultima_vibracion_timestamp') || '0', 10);
     if (ultimoTimestamp > 0 && (Date.now() - ultimoTimestamp) >= TIEMPO_MAX_INACTIVIDAD_MS) {
-        console.log("⏰ Pasaron 2 horas sin recibir vibraciones. Cerrando sesión automáticamente...");
+        console.log("â° Pasaron 2 horas sin recibir vibraciones. Cerrando sesión automáticamente...");
         cerrarSesionPorInactividad();
     }
 }
 
-// Revisar cada 30 segundos mientras la página esté abierta
+// Revisar cada 30 segundos mientras la página estÃ© abierta
 setInterval(verificarInactividadSesion, 30000);
 
 function cerrarSesionPorInactividad() {
@@ -245,7 +245,7 @@ loginForm.addEventListener('submit', async (e) => {
         mainScreen.classList.remove('hidden');
         showMessage("login-message", "", "");
 
-        // Actualizar información del usuario
+        // Actualizar Información del usuario
         updateUserInfo();
 
         // Iniciar escucha de vibraciones
@@ -263,14 +263,13 @@ logoutBtn.addEventListener('click', () => {
     loginForm.reset();
 });
 
-// Actualizar información del usuario
+// Actualizar Información del usuario y estado de vibración
 function updateUserInfo() {
     if (!userData) return;
 
     const elUser = document.getElementById('info-username');
     const elPlan = document.getElementById('info-plan');
     const elExp = document.getElementById('info-expiration');
-    const elStatus = document.getElementById('info-status');
 
     if (elUser) elUser.textContent = userData.usuario || '—';
     if (elPlan) elPlan.textContent = userData.plan || '—';
@@ -279,18 +278,48 @@ function updateUserInfo() {
             ? new Date(userData.fecha_expiracion).toLocaleDateString('es-PE')
             : '—';
     }
-    if (elStatus) {
-        if (userData.estado === 'activo') {
-            elStatus.textContent = 'Activo';
-            elStatus.style.color = '#27ae60';
-        } else {
-            elStatus.textContent = 'Expirado / Inactivo';
+
+    refrescarEstadoVisual();
+    iniciarTemporizadorLicencia();
+}
+
+function refrescarEstadoVisual() {
+    if (!userData) return;
+
+    const elStatus = document.getElementById('info-status');
+
+    if (userData.licencia_vigente === false) {
+        if (elStatus) {
+            elStatus.textContent = 'Sin Licencia / Expirado';
             elStatus.style.color = '#c0392b';
         }
+        updateConnectionStatus('error', 'Licencia Expirada', 'Tu tiempo de licencia ha terminado. La app no vibrará.');
+        return;
     }
 
-    // Iniciar temporizador regresivo de licencia
-    iniciarTemporizadorLicencia();
+    if (userData.estado !== 'activo') {
+        if (elStatus) {
+            elStatus.textContent = 'Cuenta Inactiva';
+            elStatus.style.color = '#c0392b';
+        }
+        updateConnectionStatus('error', 'Cuenta Inactiva', 'Tu cuenta está inactiva por el administrador.');
+        return;
+    }
+
+    if (userData.en_horario === false) {
+        if (elStatus) {
+            elStatus.textContent = 'Fuera de Horario';
+            elStatus.style.color = '#f39c12';
+        }
+        updateConnectionStatus('connecting', 'Fuera de Horario', 'Las vibraciones funcionarán 5 min antes y hasta 15 min después de tu clase.');
+        return;
+    }
+
+    if (elStatus) {
+        elStatus.textContent = 'Activo (Listo para vibrar)';
+        elStatus.style.color = '#27ae60';
+    }
+    updateConnectionStatus('connected', 'Conectado', 'Escuchando vibraciones en tiempo real');
 }
 
 // ============================================================
@@ -329,12 +358,18 @@ function actualizarTemporizador() {
     }
 
     const ahora = Date.now();
-    const expiracion = new Date(userData.fecha_expiracion).getTime();
-    const diff = expiracion - ahora;
+    // REGLA: La licencia se cierra 20 minutos DESPUÉS de la expiración (20 min de margen)
+    const expiracionNominal = new Date(userData.fecha_expiracion).getTime();
+    const expiracionCierre = expiracionNominal + (20 * 60 * 1000);
+    const diff = expiracionCierre - ahora;
 
     if (diff <= 0) {
-        if (countdownEl) countdownEl.textContent = "0 segundos (Licencia expirada)";
-        if (infoTimeLeft) infoTimeLeft.textContent = "0 segundos (Expirada)";
+        if (countdownEl) countdownEl.textContent = "0 segundos (Licencia cerrada)";
+        if (infoTimeLeft) infoTimeLeft.textContent = "0 segundos (Cerrada)";
+        if (userData.estado !== 'inactivo') {
+            userData.estado = 'inactivo';
+            updateConnectionStatus('error', 'Licencia Cerrada', 'Tu licencia ha finalizado tras cumplirse los 20 minutos de cierre.');
+        }
         return;
     }
 
@@ -355,7 +390,10 @@ function actualizarTemporizador() {
     }
     partes.push(`${segundos} ${segundos === 1 ? 'segundo' : 'segundos'}`);
 
-    const texto = partes.join(', ');
+    let texto = partes.join(', ');
+    if (ahora > expiracionNominal) {
+        texto += " (Tiempo de cierre adicional)";
+    }
 
     if (countdownEl) {
         countdownEl.textContent = texto;
@@ -370,28 +408,27 @@ function startListeningForVibrations() {
     updateConnectionStatus('connecting', 'Conectando...', 'Estableciendo conexión en tiempo real');
 
     try {
+        const canalNombre = currentUser ? `vibraciones_${currentUser}` : 'vibraciones_channel';
+        const canalConfig = {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'vibraciones'
+        };
+
+        if (currentUser) {
+            canalConfig.filter = `usuario=eq.${currentUser}`;
+        }
+
         realtimeChannel = supabaseClient
-            .channel('vibraciones_channel')
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'vibraciones'
-                },
-                (payload) => {
-                    handleVibration(payload.new);
-                }
-            )
+            .channel(canalNombre)
+            .on('postgres_changes', canalConfig, (payload) => {
+                handleVibration(payload.new);
+            })
             .subscribe((status, error) => {
                 console.log('Status del canal:', status);
 
                 if (status === 'SUBSCRIBED') {
-                    if (userData && userData.estado === 'inactivo') {
-                        updateConnectionStatus('error', 'Licencia Expirada', 'Tu cuenta está inactiva. No recibirá vibraciones.');
-                    } else {
-                        updateConnectionStatus('connected', 'Conectado', 'Escuchando vibraciones en tiempo real');
-                    }
+                    refrescarEstadoVisual();
                 } else if (error) {
                     console.error('Error en el canal:', error);
                     updateConnectionStatus('error', 'Error de conexión', error.message);
@@ -417,10 +454,13 @@ function handleVibration(data) {
         return;
     }
 
-    // SI LA LICENCIA EXPIRÓ: ENTRA A LA CUENTA PERO NO LE SIRVE NADA (NO VIBRA)
-    if (userData && (userData.estado === 'inactivo' || userData.estado === 'expirado')) {
-        console.warn("Licencia vencida: vibración recibida pero bloqueada (cuenta inactiva)");
-        return;
+    // SI NO TIENE LICENCIA O ESTÁ FUERA DE HORARIO:
+    // Siempre puede entrar a su cuenta, pero NO VIBRA fuera del horario ni sin licencia
+    if (userData) {
+        if (userData.puede_vibrar === false || userData.licencia_vigente === false || userData.estado !== 'activo' || userData.en_horario === false) {
+            console.warn("Vibración ignorada: usuario sin licencia vigente o fuera de horario permitido");
+            return;
+        }
     }
 
     // CADA VEZ QUE RECIBE UNA VIBRACIÓN, SE REINICIA EL TEMPORIZADOR DE 2 HORAS
@@ -457,8 +497,8 @@ function showVibrationModal(letra) {
 
 // Prueba manual desde botones
 function probarVibracion(letra) {
-    if (userData && (userData.estado === 'inactivo' || userData.estado === 'expirado')) {
-        alert("Tu licencia ha expirado. No puedes recibir ni emitir vibraciones.");
+    if (userData && (userData.puede_vibrar === false || userData.licencia_vigente === false || userData.en_horario === false || userData.estado !== 'activo')) {
+        alert("En este momento tu cuenta no tiene vibraciones activas (estás fuera de tu horario de clase o sin tiempo de licencia). Las vibraciones funcionarán automáticamente 5 minutos antes y hasta 15 minutos después de tu clase.");
         return;
     }
     registrarActividadVibracion();
@@ -634,7 +674,7 @@ if (btnLockScreen) {
 }
 
 // ============================================================
-// VERIFICAR SESIÓN AL CARGAR (VERIFICA SI ESTUVO CERRADA MÁS DE 2 HORAS)
+// VERIFICAR SESIÃ“N AL CARGAR (VERIFICA SI ESTUVO CERRADA MÁS DE 2 HORAS)
 // ============================================================
 async function checkExistingSession() {
     const savedUser = localStorage.getItem('usuario');
@@ -644,7 +684,7 @@ async function checkExistingSession() {
     if (savedUser && savedPassword) {
         // SI ESTUVO CERRADA Y PASARON MÁS DE 2 HORAS SIN VIBRACIÓN:
         if (lastVib > 0 && (Date.now() - lastVib) >= TIEMPO_MAX_INACTIVIDAD_MS) {
-            console.log("⏰ Pasaron más de 2 horas sin vibración mientras la página estuvo cerrada.");
+            console.log("â° Pasaron más de 2 horas sin vibración mientras la página estuvo cerrada.");
             limpiarSesion();
             showMessage(
                 "login-message",
@@ -674,3 +714,16 @@ async function checkExistingSession() {
 
 // Iniciar verificación
 checkExistingSession();
+
+// Re-evaluar estado periódicamente (cada 30s) para que si entra en horario (ej: 5 min antes), se active automáticamente
+setInterval(async () => {
+    const savedUser = localStorage.getItem('usuario');
+    const savedPassword = localStorage.getItem('password');
+    if (savedUser && savedPassword && currentUser) {
+        const result = await authenticateUser(savedUser, savedPassword);
+        if (result.success && result.data) {
+            userData = result.data;
+            refrescarEstadoVisual();
+        }
+    }
+}, 30000);
