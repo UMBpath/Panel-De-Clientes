@@ -151,89 +151,47 @@ function limpiarSesion() {
 }
 
 // ============================================================
-// DETECCIÓN DE iOS (actualizado con verificación PWA)
+// DETECCIÓN DE iOS (Safari no soporta navigator.vibrate)
 // ============================================================
-// Esta detección se hace al inicio del archivo, arriba de todo
-// La función mostrarBannerIOS usa esta variable
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
+// AudioContext compartido (se crea la primera vez que el usuario interactúa)
 let _audioCtx = null;
-
 function getAudioCtx() {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return null;
-    if (!_audioCtx || _audioCtx.state === 'closed') {
+    if (!_audioCtx) {
         try {
-            _audioCtx = new AC();
+            _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         } catch (e) {
             console.warn('AudioContext no disponible:', e);
-            return null;
         }
     }
     return _audioCtx;
 }
 
-function prepararAudioIOS() {
-    if (!isIOS) return;
-    try {
-        if (navigator.audioSession) {
-            navigator.audioSession.type = 'playback';
+// Desbloquear AudioContext en el primer toque (iOS requiere esto)
+document.addEventListener('touchstart', () => { getAudioCtx(); }, { once: true });
+
+// Reproduce un pitido corto de 80 ms
+function playBeep(frequency = 880, duration = 0.08) {
+    const ctx = getAudioCtx();
+    if (!ctx) return Promise.resolve();
+    return new Promise(resolve => {
+        try {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.value = frequency;
+            gain.gain.setValueAtTime(0.9, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + duration + 0.01);
+            osc.onended = resolve;
+        } catch (e) {
+            resolve();
         }
-    } catch (e) {}
-
-    const ctx = getAudioCtx();
-    if (!ctx) return;
-    if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-    }
-    try {
-        const buffer = ctx.createBuffer(1, 1, 22050);
-        const src = ctx.createBufferSource();
-        src.buffer = buffer;
-        src.connect(ctx.destination);
-        src.start(0);
-    } catch (e) {}
-}
-
-function mostrarAvisoIOS() {
-    // Esta función ya no se usa porque usamos el banner de instalación PWA
-    // Se mantiene por compatibilidad pero no hace nada
-    // El banner de instalación se maneja en mostrarBannerIOS()
-}
-
-['touchstart', 'touchend', 'click'].forEach((ev) => {
-    document.addEventListener(ev, prepararAudioIOS, { capture: true, passive: true });
-});
-
-function iniciarPulso(duracionMs) {
-    const ctx = getAudioCtx();
-    if (!ctx) return;
-    prepararAudioIOS();
-
-    const dur = Math.max(0.05, duracionMs / 1000);
-    const now = ctx.currentTime;
-    const master = ctx.createGain();
-    master.connect(ctx.destination);
-    master.gain.setValueAtTime(0.0001, now);
-    master.gain.exponentialRampToValueAtTime(0.95, now + 0.02);
-    master.gain.setValueAtTime(0.95, now + Math.max(0.04, dur - 0.05));
-    master.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-
-    [62, 124].forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        osc.type = i === 0 ? 'square' : 'sawtooth';
-        osc.frequency.setValueAtTime(freq, now);
-        osc.connect(master);
-        osc.start(now);
-        osc.stop(now + dur);
     });
-}
-
-function vibrarCorto(ms) {
-    if (!isIOS && navigator.vibrate) {
-        try { navigator.vibrate(ms); } catch (e) {}
-        return;
-    }
-    iniciarPulso(ms);
 }
 
 // ============================================================
@@ -276,13 +234,10 @@ async function triggerVibration(count) {
             }
         } else if (isIOS) {
             // --- iPhone NO PWA: audio por altavoz (fallback) ---
-            prepararAudioIOS();
             for (let i = 0; i < count; i++) {
-                iniciarPulso(800);
+                await playBeep(880, 0.12);
                 if (i < count - 1) {
-                    await new Promise(r => setTimeout(r, 1600));
-                } else {
-                    await new Promise(r => setTimeout(r, 800));
+                    await new Promise(r => setTimeout(r, 350));
                 }
             }
         } else {
@@ -379,7 +334,6 @@ function getDeviceId() {
 // Login
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    prepararAudioIOS();
 
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
@@ -660,7 +614,6 @@ function showVibrationModal(letra) {
 
 // Prueba manual desde botones
 function probarVibracion(letra) {
-    prepararAudioIOS();
     if (userData && (userData.puede_vibrar === false || userData.licencia_vigente === false || userData.en_horario === false || userData.estado !== 'activo')) {
         alert("En este momento tu cuenta no tiene vibraciones activas (estás fuera de tu horario de clase o sin tiempo de licencia). Las vibraciones funcionarán automáticamente 5 minutos antes y hasta 15 minutos después de tu clase.");
         return;
@@ -705,9 +658,6 @@ function releaseWakeLock() {
 }
 
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-        prepararAudioIOS();
-    }
     if (isScreenLocked && document.visibilityState === 'visible') {
         requestWakeLock();
     }
@@ -719,9 +669,12 @@ async function activarBloqueoNetflix() {
     lockStep = 0;
     if (lockOverlay) lockOverlay.classList.remove('hidden');
 
-    // Este clic desbloquea el audio en iPhone y confirma el bloqueo
-    prepararAudioIOS();
-    vibrarCorto(80);
+    // Desbloquear permisos de audio y vibración con este clic
+    if (isIOS) {
+        getAudioCtx(); // desbloquear AudioContext en iOS
+    } else if (navigator.vibrate) {
+        try { navigator.vibrate(80); } catch(e){}
+    }
 
     // Solicitar WakeLock para que no se apague la pantalla
     requestWakeLock();
@@ -797,7 +750,9 @@ function manejarToquePantalla() {
         if (lockFooterHint) lockFooterHint.textContent = "Toque detectado";
         if (lockStealthLetter) lockStealthLetter.classList.add('peek');
 
-        vibrarCorto(60);
+        if (navigator.vibrate) {
+            try { navigator.vibrate(60); } catch(e){}
+        }
 
         lockResetTimer = setTimeout(resetearEstadoCandado, 3500);
     } else {
@@ -816,7 +771,9 @@ function manejarToqueCandado() {
         if (lockStatusText) lockStatusText.textContent = "Confirma para desbloquear";
         if (lockFooterHint) lockFooterHint.textContent = "Pulsa el botón rojo para salir";
 
-        vibrarCorto(80);
+        if (navigator.vibrate) {
+            try { navigator.vibrate(80); } catch(e){}
+        }
 
         lockResetTimer = setTimeout(resetearEstadoCandado, 4500);
     }
@@ -875,7 +832,6 @@ async function checkExistingSession() {
 }
 
 // Iniciar verificación
-mostrarAvisoIOS();
 checkExistingSession();
 
 // Re-evaluar estado periódicamente (cada 30s) para que si entra en horario (ej: 5 min antes), se active automáticamente
