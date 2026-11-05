@@ -1,0 +1,26 @@
+{
+  "short_name": "Salva",
+  "name": "Salva - Sistema de Vibraciones",
+  "description": "Sistema de vibraciones para exámenes en tiempo real",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/index.html",
+  "background_color": "#667eea",
+  "theme_color": "#667eea",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "categories": ["utilities", "education"]
+}

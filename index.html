@@ -6,6 +6,15 @@
     <title>Panel de Clientes - Sistema de Vibraciones</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+
+    <!-- Optimización para iOS (Safari) - PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Salva">
+    <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
     <!-- Pantalla de Login -->
@@ -110,6 +119,20 @@
                         <strong>D</strong>
                         <small>4 pulsos</small>
                     </button>
+                </div>
+            </div>
+
+            <!-- Aviso para usuarios de iPhone -->
+            <div id="ios-install-banner" class="ios-install-banner hidden">
+                <div class="ios-install-content">
+                    <h3>ðŸ“± iPhone: Instala la app para vibrar</h3>
+                    <p>Para que tu iPhone vibre, instala esta web como aplicaciÃ³n:</p>
+                    <ol>
+                        <li>Toca el botÃ³n <strong>Compartir</strong> en Safari (icono â¬†ï¸)</li>
+                        <li>Selecciona <strong>"AÃ±adir a pantalla de inicio"</strong></li>
+                        <li>Abre la app desde el icono en tu pantalla</li>
+                    </ol>
+                    <button id="ios-install-close" class="ios-install-close">âœ Entendido</button>
                 </div>
             </div>
 

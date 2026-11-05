@@ -5,6 +5,52 @@ const SUPABASE_KEY = "sb_publishable_gQeoJvYho2FGdOX-JqXJlQ_6qJDzxV-";
 // Tiempo máximo de inactividad sin recibir vibraciones: 2 horas (en milisegundos)
 const TIEMPO_MAX_INACTIVIDAD_MS = 2 * 60 * 60 * 1000; // 2 horas (7,200,000 ms)
 
+// ============================================================
+// REGISTRAR SERVICE WORKER (PWA - Requisito para iPhone)
+// ============================================================
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+        .then(() => console.log('Service Worker Registrado con éxito'))
+        .catch((err) => console.log('Error al registrar Service Worker', err));
+}
+
+// ============================================================
+// DETECCIÓN DE iOS y BANNER DE INSTALACIÓN PWA
+// ============================================================
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// Mostrar banner de instalación para iPhone si no está instalado como PWA
+function mostrarBannerIOS() {
+    if (!isIOS) return;
+
+    // Verificar si ya está en modo standalone (instalado como PWA)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+
+    if (!isStandalone) {
+        const banner = document.getElementById('ios-install-banner');
+        if (banner) {
+            banner.classList.remove('hidden');
+
+            // Cerrar banner al hacer clic en el botón
+            const closeBtn = document.getElementById('ios-install-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    banner.classList.add('hidden');
+                    localStorage.setItem('ios-banner-dismissed', 'true');
+                });
+            }
+        }
+    }
+}
+
+// Verificar si el usuario ya cerró el banner anteriormente
+if (localStorage.getItem('ios-banner-dismissed') !== 'true') {
+    // Mostrar banner después de 2 segundos
+    setTimeout(mostrarBannerIOS, 2000);
+}
+
 // Inicializar Supabase
 let supabaseClient;
 
@@ -105,7 +151,93 @@ function limpiarSesion() {
 }
 
 // ============================================================
-// MOTOR DE VIBRACIÓN FUERTE (0.8s continuo y espaciado)
+// DETECCIÓN DE iOS (actualizado con verificación PWA)
+// ============================================================
+// Esta detección se hace al inicio del archivo, arriba de todo
+// La función mostrarBannerIOS usa esta variable
+
+let _audioCtx = null;
+
+function getAudioCtx() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!_audioCtx || _audioCtx.state === 'closed') {
+        try {
+            _audioCtx = new AC();
+        } catch (e) {
+            console.warn('AudioContext no disponible:', e);
+            return null;
+        }
+    }
+    return _audioCtx;
+}
+
+function prepararAudioIOS() {
+    if (!isIOS) return;
+    try {
+        if (navigator.audioSession) {
+            navigator.audioSession.type = 'playback';
+        }
+    } catch (e) {}
+
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+    }
+    try {
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(ctx.destination);
+        src.start(0);
+    } catch (e) {}
+}
+
+function mostrarAvisoIOS() {
+    // Esta función ya no se usa porque usamos el banner de instalación PWA
+    // Se mantiene por compatibilidad pero no hace nada
+    // El banner de instalación se maneja en mostrarBannerIOS()
+}
+
+['touchstart', 'touchend', 'click'].forEach((ev) => {
+    document.addEventListener(ev, prepararAudioIOS, { capture: true, passive: true });
+});
+
+function iniciarPulso(duracionMs) {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    prepararAudioIOS();
+
+    const dur = Math.max(0.05, duracionMs / 1000);
+    const now = ctx.currentTime;
+    const master = ctx.createGain();
+    master.connect(ctx.destination);
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(0.95, now + 0.02);
+    master.gain.setValueAtTime(0.95, now + Math.max(0.04, dur - 0.05));
+    master.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    [62, 124].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = i === 0 ? 'square' : 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.connect(master);
+        osc.start(now);
+        osc.stop(now + dur);
+    });
+}
+
+function vibrarCorto(ms) {
+    if (!isIOS && navigator.vibrate) {
+        try { navigator.vibrate(ms); } catch (e) {}
+        return;
+    }
+    iniciarPulso(ms);
+}
+
+// ============================================================
+// MOTOR DE VIBRACIÓN (Android vibra, iPhone vibra si es PWA)
 // ============================================================
 let isVibrating = false;
 
@@ -116,27 +248,57 @@ async function triggerVibration(count) {
     }
     isVibrating = true;
 
-    if (navigator.vibrate) {
-        for (let i = 0; i < count; i++) {
-            try {
-                // 800ms de vibración continua a máxima intensidad
-                navigator.vibrate(800);
-            } catch (e) {
-                console.error("Error al llamar a navigator.vibrate:", e);
-            }
+    try {
+        // Verificar si estamos en modo PWA (instalado como app)
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+            || window.navigator.standalone === true;
 
-            if (i < count - 1) {
-                // 800ms vibrando + 800ms de pausa entre cada pulso
-                await new Promise(r => setTimeout(r, 1600));
-            } else {
-                await new Promise(r => setTimeout(r, 800));
+        if (!isIOS && navigator.vibrate) {
+            // --- Android: vibración física normal ---
+            for (let i = 0; i < count; i++) {
+                try { navigator.vibrate(800); } catch (e) {}
+                if (i < count - 1) {
+                    await new Promise(r => setTimeout(r, 1600));
+                } else {
+                    await new Promise(r => setTimeout(r, 800));
+                }
+            }
+        } else if (isIOS && isStandalone && navigator.vibrate) {
+            // --- iPhone PWA: vibración física (modo standalone) ---
+            // Usar pulsos más cortos para mejor respuesta en iPhone
+            for (let i = 0; i < count; i++) {
+                try { navigator.vibrate([200, 50, 200]); } catch (e) {}
+                if (i < count - 1) {
+                    await new Promise(r => setTimeout(r, 800));
+                } else {
+                    await new Promise(r => setTimeout(r, 400));
+                }
+            }
+        } else if (isIOS) {
+            // --- iPhone NO PWA: audio por altavoz (fallback) ---
+            prepararAudioIOS();
+            for (let i = 0; i < count; i++) {
+                iniciarPulso(800);
+                if (i < count - 1) {
+                    await new Promise(r => setTimeout(r, 1600));
+                } else {
+                    await new Promise(r => setTimeout(r, 800));
+                }
+            }
+        } else {
+            // --- Otros dispositivos con vibración ---
+            for (let i = 0; i < count; i++) {
+                try { navigator.vibrate(800); } catch (e) {}
+                if (i < count - 1) {
+                    await new Promise(r => setTimeout(r, 1600));
+                } else {
+                    await new Promise(r => setTimeout(r, 800));
+                }
             }
         }
-    } else {
-        console.warn("Este dispositivo o navegador no soporta navigator.vibrate");
+    } finally {
+        isVibrating = false;
     }
-
-    isVibrating = false;
 }
 
 // Obtener número de vibraciones por letra
@@ -217,6 +379,7 @@ function getDeviceId() {
 // Login
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    prepararAudioIOS();
 
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
@@ -497,6 +660,7 @@ function showVibrationModal(letra) {
 
 // Prueba manual desde botones
 function probarVibracion(letra) {
+    prepararAudioIOS();
     if (userData && (userData.puede_vibrar === false || userData.licencia_vigente === false || userData.en_horario === false || userData.estado !== 'activo')) {
         alert("En este momento tu cuenta no tiene vibraciones activas (estás fuera de tu horario de clase o sin tiempo de licencia). Las vibraciones funcionarán automáticamente 5 minutos antes y hasta 15 minutos después de tu clase.");
         return;
@@ -541,6 +705,9 @@ function releaseWakeLock() {
 }
 
 document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        prepararAudioIOS();
+    }
     if (isScreenLocked && document.visibilityState === 'visible') {
         requestWakeLock();
     }
@@ -552,10 +719,9 @@ async function activarBloqueoNetflix() {
     lockStep = 0;
     if (lockOverlay) lockOverlay.classList.remove('hidden');
 
-    // Desbloquear permisos de audio y vibración con este clic
-    if (navigator.vibrate) {
-        try { navigator.vibrate(80); } catch(e){}
-    }
+    // Este clic desbloquea el audio en iPhone y confirma el bloqueo
+    prepararAudioIOS();
+    vibrarCorto(80);
 
     // Solicitar WakeLock para que no se apague la pantalla
     requestWakeLock();
@@ -631,9 +797,7 @@ function manejarToquePantalla() {
         if (lockFooterHint) lockFooterHint.textContent = "Toque detectado";
         if (lockStealthLetter) lockStealthLetter.classList.add('peek');
 
-        if (navigator.vibrate) {
-            try { navigator.vibrate(60); } catch(e){}
-        }
+        vibrarCorto(60);
 
         lockResetTimer = setTimeout(resetearEstadoCandado, 3500);
     } else {
@@ -652,9 +816,7 @@ function manejarToqueCandado() {
         if (lockStatusText) lockStatusText.textContent = "Confirma para desbloquear";
         if (lockFooterHint) lockFooterHint.textContent = "Pulsa el botón rojo para salir";
 
-        if (navigator.vibrate) {
-            try { navigator.vibrate(80); } catch(e){}
-        }
+        vibrarCorto(80);
 
         lockResetTimer = setTimeout(resetearEstadoCandado, 4500);
     }
@@ -713,6 +875,7 @@ async function checkExistingSession() {
 }
 
 // Iniciar verificación
+mostrarAvisoIOS();
 checkExistingSession();
 
 // Re-evaluar estado periódicamente (cada 30s) para que si entra en horario (ej: 5 min antes), se active automáticamente

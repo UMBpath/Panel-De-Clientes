@@ -537,6 +537,17 @@ body {
     margin-bottom: 16px;
 }
 
+.ios-hint {
+    color: #92400e;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    margin: -6px 0 16px;
+}
+
 .test-buttons-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -692,5 +703,65 @@ body {
     font-size: 12px;
     letter-spacing: 0.5px;
     pointer-events: none;
+}
+
+/* ============================================================ */
+/* BANNER DE INSTALACIÓN PARA IPHONE (PWA)                     */
+/* ============================================================ */
+
+.ios-install-banner {
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+    border: 2px solid #3b82f6;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+}
+
+.ios-install-content h3 {
+    color: #60a5fa;
+    font-size: 18px;
+    margin-bottom: 12px;
+}
+
+.ios-install-content p {
+    color: #94a3b8;
+    font-size: 14px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.ios-install-content ol {
+    color: #cbd5e1;
+    font-size: 13px;
+    margin-left: 20px;
+    margin-bottom: 16px;
+    line-height: 1.6;
+}
+
+.ios-install-content li {
+    margin-bottom: 8px;
+}
+
+.ios-install-close {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.ios-install-close:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.ios-install-close:active {
+    transform: scale(0.98);
 }
 
