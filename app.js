@@ -153,7 +153,8 @@ function limpiarSesion() {
 // ============================================================
 // DETECCIÓN DE iOS (Safari no soporta navigator.vibrate)
 // ============================================================
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+// La variable isIOS ya está declarada al inicio del archivo (línea 20)
+// con detección mejorada que incluye iPad Pro con touch
 
 // AudioContext compartido (se crea la primera vez que el usuario interactúa)
 let _audioCtx = null;
