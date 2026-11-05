@@ -394,6 +394,29 @@ function updateUserInfo() {
 
     refrescarEstadoVisual();
     iniciarTemporizadorLicencia();
+
+    // Configurar enlace de iPhone con Telegram
+    const btnVincularTelegram = document.getElementById('btn-vincular-telegram');
+    const badgeTelegram = document.getElementById('iphone-status-badge');
+    const TELEGRAM_BOT_USERNAME = window.TELEGRAM_BOT_USERNAME || 'salva_iphone_vibrador_bot';
+
+    if (btnVincularTelegram && userData.usuario) {
+        btnVincularTelegram.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${encodeURIComponent(userData.usuario)}`;
+    }
+
+    if (userData.telegram_chat_id) {
+        if (badgeTelegram) badgeTelegram.classList.remove('hidden');
+        if (btnVincularTelegram) {
+            btnVincularTelegram.innerHTML = '<span>🔄 Reconectar iPhone</span>';
+            btnVincularTelegram.style.background = '#475569';
+        }
+    } else {
+        if (badgeTelegram) badgeTelegram.classList.add('hidden');
+        if (btnVincularTelegram) {
+            btnVincularTelegram.innerHTML = '<span>📲 Activar Vibraciones en iPhone</span>';
+            btnVincularTelegram.style.background = '';
+        }
+    }
 }
 
 function refrescarEstadoVisual() {
