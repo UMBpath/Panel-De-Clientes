@@ -222,8 +222,8 @@ async function triggerVibration(count) {
                     await new Promise(r => setTimeout(r, 800));
                 }
             }
-        } else if (isIOS && isStandalone && navigator.vibrate) {
-            // --- iPhone PWA: vibración física (modo standalone) ---
+        } else if (isIOS && navigator.vibrate) {
+            // --- iPhone: vibración física (si el dispositivo la soporta) ---
             // Usar pulsos más cortos para mejor respuesta en iPhone
             for (let i = 0; i < count; i++) {
                 try { navigator.vibrate([200, 50, 200]); } catch (e) {}
@@ -234,13 +234,8 @@ async function triggerVibration(count) {
                 }
             }
         } else if (isIOS) {
-            // --- iPhone NO PWA: audio por altavoz (fallback) ---
-            for (let i = 0; i < count; i++) {
-                await playBeep(880, 0.12);
-                if (i < count - 1) {
-                    await new Promise(r => setTimeout(r, 350));
-                }
-            }
+            // --- iPhone sin soporte de vibración: no hacer nada (silencio) ---
+            // No hacemos sonido porque el usuario solo quiere vibración
         } else {
             // --- Otros dispositivos con vibración ---
             for (let i = 0; i < count; i++) {
