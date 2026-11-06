@@ -106,7 +106,7 @@ def enviar_vibracion_iphone(chat_id, cantidad):
         }
         telegram_api("sendMessage", params)
         if i < cantidad:
-            time.sleep(0.35)
+            time.sleep(8.0)
 
 def ejecutar_autenticacion_y_vinculo(chat_id, telegram_user, usuario, password):
     """Valida credenciales contra Supabase y guarda el chat_id en usuarios_app"""
