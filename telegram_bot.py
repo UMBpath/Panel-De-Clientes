@@ -1,6 +1,7 @@
 """
 Bot de Telegram para Vibraciones en iPhone (Sistema Salva Web)
-Valida Usuario y Contraseña directamente desde Telegram contra Supabase.
+Soporta Webhook oficial para Render (despierta automáticamente al recibir mensajes)
+y Long-Polling como respaldo local.
 """
 
 import sys
@@ -13,42 +14,24 @@ import urllib.parse
 import urllib.error
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# Servidor web mínimo para mantener vivo el servicio en la nube gratis (Render / Railway)
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"Bot Telegram Activo 24/7")
-    
-    def log_message(self, format, *args):
-        pass
-
-def iniciar_servidor_web():
-    try:
-        puerto = int(os.environ.get("PORT", 8080))
-        servidor = HTTPServer(("0.0.0.0", puerto), HealthCheckHandler)
-        log(f"Servidor web de salud activo en puerto {puerto}")
-        servidor.serve_forever()
-    except Exception as e:
-        log(f"Aviso servidor web: {e}")
-
 # Importar configuración
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import SUPABASE_URL, SUPABASE_KEY, TELEGRAM_BOT_TOKEN
 
+# URL pública de Render para el Webhook
+RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://salva-iphone-bot.onrender.com")
+
 # Memoria de sesiones temporales para el flujo de login
-# Formato: { chat_id: { "paso": "esperando_password", "usuario": "carlos" } }
 SESIONES_LOGIN = {}
 
 def log(msg):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] [TelegramBot] {msg}")
+    print(f"[{timestamp}] [TelegramBot] {msg}", flush=True)
 
 def telegram_api(metodo, params=None):
     """Llama a la API oficial de Telegram mediante urllib estándar"""
     if not TELEGRAM_BOT_TOKEN or "AQUI" in TELEGRAM_BOT_TOKEN:
-        log("ERROR: TELEGRAM_BOT_TOKEN no configurado en config.py")
+        log("ERROR: TELEGRAM_BOT_TOKEN no configurado.")
         return None
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{metodo}"
     try:
@@ -112,7 +95,6 @@ def ejecutar_autenticacion_y_vinculo(chat_id, telegram_user, usuario, password):
     """Valida credenciales contra Supabase y guarda el chat_id en usuarios_app"""
     log(f"Autenticando usuario '{usuario}' para chat_id {chat_id}")
     
-    # 1. Validar usuario y contraseña con autenticar_usuario_app
     auth_res = supabase_rpc("autenticar_usuario_app", {
         "p_usuario": usuario,
         "p_password": password,
@@ -130,14 +112,13 @@ def ejecutar_autenticacion_y_vinculo(chat_id, telegram_user, usuario, password):
         SESIONES_LOGIN[chat_id] = {"paso": "esperando_usuario"}
         return
 
-    # 2. Si las credenciales son válidas, vincular telegram_chat_id
-    vinc_res = supabase_rpc("vincular_telegram", {
+    # Vincular en base de datos
+    supabase_rpc("vincular_telegram", {
         "p_usuario": usuario,
         "p_chat_id": chat_id,
         "p_telegram_user": telegram_user
     })
 
-    # Limpiar estado de sesión
     SESIONES_LOGIN.pop(chat_id, None)
 
     plan = auth_res.get("plan", "Activo")
@@ -156,7 +137,7 @@ def ejecutar_autenticacion_y_vinculo(chat_id, telegram_user, usuario, password):
         f"📦 *Licencia:* {plan}\n"
         f"📱 *Estado:* iPhone vinculado y listo.\n\n"
         f"⚡ *¿Cómo usarlo en el examen?*\n"
-        f"1. Abre **SmowlCM.exe** en tu PC e inicia sesión con este mismo usuario y contraseña.\n"
+        f"1. Abre **salva.exe** en tu PC e inicia sesión con este mismo usuario y contraseña.\n"
         f"2. Durante el examen, cada vez que presiones la tecla punto (** . **), tu iPhone vibrará la cantidad de veces de la opción correcta:\n"
         f"   • **A** = 1 vibración\n"
         f"   • **B** = 2 vibraciones\n"
@@ -175,8 +156,25 @@ def procesar_mensaje(msg):
     if not chat_id or not texto:
         return
 
+    log(f"Mensaje recibido de {chat_id} ({telegram_user}): {texto}")
+
     # Comando /start o /login
     if texto.startswith("/start") or texto == "/login":
+        partes = texto.split(maxsplit=1)
+        # Si viene con usuario adjunto: /start usuario
+        if len(partes) > 1:
+            usuario = partes[1].strip()
+            SESIONES_LOGIN[chat_id] = {
+                "paso": "esperando_password",
+                "usuario": usuario
+            }
+            enviar_mensaje(
+                chat_id,
+                f"👤 Usuario detectado: `{usuario}`\n\n"
+                f"🔑 Ahora escribe tu *contraseña*:"
+            )
+            return
+
         SESIONES_LOGIN[chat_id] = {"paso": "esperando_usuario"}
         enviar_mensaje(
             chat_id,
@@ -188,21 +186,14 @@ def procesar_mensaje(msg):
 
     # Comando /probar
     if texto == "/probar":
-        enviar_mensaje(chat_id, "🔔 *Enviando 3 vibraciones de prueba a tu iPhone...*")
-        enviar_vibracion_iphone(chat_id, 3)
+        enviar_mensaje(chat_id, "🔔 *Enviando vibración de prueba a tu iPhone...*")
+        enviar_vibracion_iphone(chat_id, 2)
         return
 
-    # Comando /desvincular o /salir
-    if texto == "/desvincular" or texto == "/salir":
-        SESIONES_LOGIN.pop(chat_id, None)
-        enviar_mensaje(chat_id, "ℹ️ Sesión cerrada. Para volver a iniciar envía /start")
-        return
-
-    # Flujo de inicio de sesión paso a paso
+    # Flujo de login
     estado = SESIONES_LOGIN.get(chat_id, {})
     paso = estado.get("paso")
 
-    # Si está esperando el usuario
     if paso == "esperando_usuario":
         usuario_ingresado = texto.replace("@", "").strip()
         SESIONES_LOGIN[chat_id] = {
@@ -216,24 +207,22 @@ def procesar_mensaje(msg):
         )
         return
 
-    # Si está esperando la contraseña
     if paso == "esperando_password":
         usuario = estado.get("usuario")
         password = texto.strip()
         ejecutar_autenticacion_y_vinculo(chat_id, telegram_user, usuario, password)
         return
 
-    # Si el usuario escribe todo en una sola línea (ej: "carlos 1234")
+    # Usuario y contraseña juntos en una línea: "usuario clave"
     partes = texto.split()
     if len(partes) == 2:
         usuario, password = partes[0].strip(), partes[1].strip()
         ejecutar_autenticacion_y_vinculo(chat_id, telegram_user, usuario, password)
         return
 
-    # Mensaje no reconocido
     enviar_mensaje(
         chat_id,
-        "👋 Para iniciar sesión con tu cuenta, envía el comando /start o escribe tu *usuario*."
+        "👋 Para iniciar sesión con tu cuenta, escribe /start o tu *nombre de usuario*."
     )
 
 def procesar_callback(cb):
@@ -244,17 +233,46 @@ def procesar_callback(cb):
     telegram_api("answerCallbackQuery", {"callback_query_id": cb_id})
 
     if data == "probar" and chat_id:
-        enviar_mensaje(chat_id, "📳 *Enviando 3 vibraciones de prueba a tu iPhone...*")
-        enviar_vibracion_iphone(chat_id, 3)
+        enviar_mensaje(chat_id, "📳 *Enviando vibración de prueba a tu iPhone (2 pulsos)...*")
+        enviar_vibracion_iphone(chat_id, 2)
+
+def procesar_update(update):
+    """Procesa un update individual proveniente de Webhook o Polling"""
+    if "message" in update:
+        procesar_mensaje(update["message"])
+    elif "callback_query" in update:
+        procesar_callback(update["callback_query"])
+
+# Servidor Webhook HTTP para Render
+class WebhookHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Bot Telegram Activo 24/7 (Webhook Operativo)")
+
+    def do_POST(self):
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            update = json.loads(body)
+            # Procesar en hilo para responder inmediatamente a Telegram con 200 OK
+            threading.Thread(target=procesar_update, args=(update,), daemon=True).start()
+        except Exception as e:
+            log(f"Error procesando update webhook: {e}")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, format, *args):
+        pass
 
 def iniciar_bot():
     log("Iniciando Bot de Telegram para iPhone...")
-    
-    # Iniciar servidor web en segundo plano para compatibilidad con plan Free de Render
-    threading.Thread(target=iniciar_servidor_web, daemon=True).start()
-
     if not TELEGRAM_BOT_TOKEN or "AQUI" in TELEGRAM_BOT_TOKEN:
-        print("ERROR: TELEGRAM_BOT_TOKEN no configurado.")
+        log("ERROR: TELEGRAM_BOT_TOKEN no configurado.")
         return
 
     me = telegram_api("getMe")
@@ -263,30 +281,54 @@ def iniciar_bot():
         return
 
     bot_info = me.get("result", {})
-    log(f"Bot conectado exitosamente: @{bot_info.get('username')} ({bot_info.get('first_name')})")
+    username = bot_info.get("username")
+    log(f"Bot verificado: @{username}")
 
-    offset = None
-    while True:
-        try:
-            params = {"timeout": 25}
-            if offset:
-                params["offset"] = offset
+    puerto = int(os.environ.get("PORT", 8080))
+    en_render = "RENDER" in os.environ or "PORT" in os.environ
 
-            updates = telegram_api("getUpdates", params)
-            if updates and updates.get("ok"):
-                for item in updates.get("result", []):
-                    offset = item.get("update_id") + 1
-                    if "message" in item:
-                        procesar_mensaje(item["message"])
-                    elif "callback_query" in item:
-                        procesar_callback(item["callback_query"])
-            time.sleep(0.5)
-        except KeyboardInterrupt:
-            log("Bot detenido por el usuario.")
-            break
-        except Exception as e:
-            log(f"Error en loop de bot: {e}")
-            time.sleep(3)
+    if en_render:
+        # En la nube (Render): usar Webhook oficial
+        # Esto garantiza que cada mensaje de un alumno sea un HTTP POST a Render que lo despierte de inmediato
+        webhook_url = f"{RENDER_EXTERNAL_URL}/webhook"
+        log(f"Configurando Webhook en Telegram: {webhook_url}")
+        res = telegram_api("setWebhook", {
+            "url": webhook_url,
+            "drop_pending_updates": False
+        })
+        log(f"Resultado setWebhook: {res}")
+
+        log(f"Iniciando servidor HTTP Webhook en puerto {puerto}...")
+        servidor = HTTPServer(("0.0.0.0", puerto), WebhookHandler)
+        log("Servidor Webhook listo y escuchando!")
+        servidor.serve_forever()
+    else:
+        # En local: eliminar webhook y usar Long-Polling
+        log("Ejecutando en modo local (Polling)...")
+        telegram_api("deleteWebhook")
+        
+        # Iniciar health check en segundo plano
+        threading.Thread(target=lambda: HTTPServer(("0.0.0.0", puerto), WebhookHandler).serve_forever(), daemon=True).start()
+        
+        offset = None
+        while True:
+            try:
+                params = {"timeout": 25}
+                if offset:
+                    params["offset"] = offset
+
+                updates = telegram_api("getUpdates", params)
+                if updates and updates.get("ok"):
+                    for item in updates.get("result", []):
+                        offset = item.get("update_id") + 1
+                        procesar_update(item)
+                time.sleep(0.5)
+            except KeyboardInterrupt:
+                log("Bot detenido.")
+                break
+            except Exception as e:
+                log(f"Error polling: {e}")
+                time.sleep(3)
 
 if __name__ == "__main__":
     iniciar_bot()
