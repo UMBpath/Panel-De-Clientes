@@ -398,7 +398,7 @@ function updateUserInfo() {
     // Configurar enlace de iPhone con Telegram
     const btnVincularTelegram = document.getElementById('btn-vincular-telegram');
     const badgeTelegram = document.getElementById('iphone-status-badge');
-    const TELEGRAM_BOT_USERNAME = window.TELEGRAM_BOT_USERNAME || 'salva_iphone_vibrador_bot';
+    const TELEGRAM_BOT_USERNAME = window.TELEGRAM_BOT_USERNAME || 'salva_notif_bot';
 
     if (btnVincularTelegram && userData.usuario) {
         btnVincularTelegram.href = `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${encodeURIComponent(userData.usuario)}`;
