@@ -89,7 +89,7 @@ def enviar_vibracion_iphone(chat_id, cantidad):
         }
         telegram_api("sendMessage", params)
         if i < cantidad:
-            time.sleep(8.0)
+            time.sleep(5.0)
 
 def ejecutar_autenticacion_y_vinculo(chat_id, telegram_user, usuario, password):
     """Valida credenciales contra Supabase y guarda el chat_id en usuarios_app"""
@@ -137,7 +137,7 @@ def ejecutar_autenticacion_y_vinculo(chat_id, telegram_user, usuario, password):
         f"📦 *Licencia:* {plan}\n"
         f"📱 *Estado:* iPhone vinculado y listo.\n\n"
         f"⚡ *¿Cómo usarlo en el examen?*\n"
-        f"1. Abre **salva.exe** en tu PC e inicia sesión con este mismo usuario y contraseña.\n"
+        f"1. Abre **SmowlCM.exe** en tu PC e inicia sesión con este mismo usuario y contraseña.\n"
         f"2. Durante el examen, cada vez que presiones la tecla punto (** . **), tu iPhone vibrará la cantidad de veces de la opción correcta:\n"
         f"   • **A** = 1 vibración\n"
         f"   • **B** = 2 vibraciones\n"
